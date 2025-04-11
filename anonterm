@@ -1,0 +1,86 @@
+#!/bin/bash
+
+# === DETECTAR INTERFAZ DE RED ACTIVA ===
+IFACE=$(ip route get 8.8.8.8 | grep -oP 'dev \K\S+')
+if [ -z "$IFACE" ]; then
+    echo "[✘] No se pudo detectar interfaz de red activa."
+    exit 1
+fi
+
+REAL_MAC=$(cat /sys/class/net/$IFACE/address)
+TEMP_HIST=$(mktemp)
+TOR_STARTED=false
+
+# Asegura que ~/bin está en el PATH
+if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
+  export PATH="$HOME/bin:$PATH"
+fi
+
+# Verifica que los comandos esenciales estén
+for cmd in tor macchanger proxychains zsh; do
+    if ! command -v $cmd &>/dev/null; then
+        echo "[✘] Faltan dependencias: $cmd no está instalado."
+        exit 1
+    fi
+done
+
+# === INICIO DE MODO ANÓNIMO ===
+
+echo "[*] Interfaz activa detectada: $IFACE"
+echo "[*] Cambiando MAC de $IFACE..."
+sudo ip link set $IFACE down
+sudo macchanger -r $IFACE &>/dev/null
+sudo ip link set $IFACE up
+
+# Inicia Tor si no está activo
+if ! pgrep -x tor > /dev/null; then
+    echo "[*] Iniciando Tor..."
+    sudo systemctl start tor
+    TOR_STARTED=true
+else
+    echo "[*] Tor ya estaba en ejecución."
+fi
+
+# Configura historial temporal
+export HISTFILE=$TEMP_HIST
+export HISTSIZE=0
+export HISTFILESIZE=0
+
+# Prompt temporal indicando modo anónimo
+export PS1="%F{green}[anon]%f %n@%m %1~ %# "
+
+# Mostrar IP anónima
+echo "[✔] IP anónima actual:"
+proxychains curl -s https://ifconfig.me && echo
+
+# Alias temporales para enrutar tráfico por proxy
+alias curl='proxychains curl'
+alias nmap='proxychains nmap'
+alias whois='proxychains whois'
+alias theHarvester='proxychains theHarvester'
+alias ping='proxychains ping'
+alias amass='proxychains amass'
+
+echo "[*] Terminal anónima iniciada. Todo el tráfico OSINT irá por Tor."
+
+# Inicia tu shell Zsh con todos los plugins
+zsh
+
+# === AL SALIR ===
+
+echo "[*] Cerrando terminal anónima..."
+echo "[*] Restaurando MAC original en $IFACE..."
+sudo ip link set $IFACE down
+sudo macchanger -m $REAL_MAC $IFACE &>/dev/null
+sudo ip link set $IFACE up
+
+# Detener Tor si fue iniciado por este script
+if [ "$TOR_STARTED" = true ]; then
+    echo "[*] Deteniendo Tor..."
+    sudo systemctl stop tor
+fi
+
+# Eliminar historial temporal
+rm -f "$TEMP_HIST"
+
+echo "[✔] Modo anónimo desactivado. Todo restaurado."
