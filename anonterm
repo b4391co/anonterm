@@ -9,7 +9,7 @@ fi
 
 REAL_MAC=$(cat /sys/class/net/$IFACE/address)
 TEMP_HIST=$(mktemp)
-TOR_STARTED=false
+WARP_CONNECTED=false
 
 # Asegura que ~/bin está en el PATH
 if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
@@ -17,14 +17,14 @@ if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
 fi
 
 # Verifica que los comandos esenciales estén
-for cmd in tor macchanger proxychains zsh; do
+for cmd in macchanger zsh warp-cli; do
     if ! command -v $cmd &>/dev/null; then
         echo "[✘] Faltan dependencias: $cmd no está instalado."
         exit 1
     fi
 done
 
-# === INICIO DE MODO ANÓNIMO ===
+# === INICIO DE MODO PRIVADO CON WARP ===
 
 echo "[*] Interfaz activa detectada: $IFACE"
 echo "[*] Cambiando MAC de $IFACE..."
@@ -32,13 +32,13 @@ sudo ip link set $IFACE down
 sudo macchanger -r $IFACE &>/dev/null
 sudo ip link set $IFACE up
 
-# Inicia Tor si no está activo
-if ! pgrep -x tor > /dev/null; then
-    echo "[*] Iniciando Tor..."
-    sudo systemctl start tor
-    TOR_STARTED=true
+# Conectar a WARP si no está activo
+if ! warp-cli status | grep -q "warp=on"; then
+    echo "[*] Conectando a Cloudflare WARP..."
+    warp-cli connect
+    WARP_CONNECTED=true
 else
-    echo "[*] Tor ya estaba en ejecución."
+    echo "[*] Ya estás conectado a WARP."
 fi
 
 # Configura historial temporal
@@ -46,41 +46,33 @@ export HISTFILE=$TEMP_HIST
 export HISTSIZE=0
 export HISTFILESIZE=0
 
-# Prompt temporal indicando modo anónimo
-export PS1="%F{green}[anon]%f %n@%m %1~ %# "
+# Prompt temporal indicando modo privado
+export PS1="%F{magenta}[warp]%f %n@%m %1~ %# "
 
-# Mostrar IP anónima
-echo "[✔] IP anónima actual:"
-proxychains curl -s https://ifconfig.me && echo
+# Mostrar IP protegida
+WARP_IP=$(timeout 10 curl -s https://ifconfig.co)
+echo "[✔] IP protegida: $WARP_IP"
 
-# Alias temporales para enrutar tráfico por proxy
-alias curl='proxychains curl'
-alias nmap='proxychains nmap'
-alias whois='proxychains whois'
-alias theHarvester='proxychains theHarvester'
-alias ping='proxychains ping'
-alias amass='proxychains amass'
+echo "[*] Terminal privada iniciada con Cloudflare WARP activo."
 
-echo "[*] Terminal anónima iniciada. Todo el tráfico OSINT irá por Tor."
-
-# Inicia tu shell Zsh con todos los plugins
+# Ejecuta Zsh con configuración completa
 zsh
 
 # === AL SALIR ===
 
-echo "[*] Cerrando terminal anónima..."
+echo "[*] Cerrando terminal privada..."
 echo "[*] Restaurando MAC original en $IFACE..."
 sudo ip link set $IFACE down
 sudo macchanger -m $REAL_MAC $IFACE &>/dev/null
 sudo ip link set $IFACE up
 
-# Detener Tor si fue iniciado por este script
-if [ "$TOR_STARTED" = true ]; then
-    echo "[*] Deteniendo Tor..."
-    sudo systemctl stop tor
+# Desconectar de WARP si fue conectado desde aquí
+if [ "$WARP_CONNECTED" = true ]; then
+    echo "[*] Desconectando de WARP..."
+    warp-cli disconnect
 fi
 
-# Eliminar historial temporal
+# Borrar historial temporal
 rm -f "$TEMP_HIST"
 
-echo "[✔] Modo anónimo desactivado. Todo restaurado."
+echo "[✔] Terminal privada finalizada. WARP y MAC restaurados."

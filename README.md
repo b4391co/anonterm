@@ -1,87 +1,93 @@
-# anonterm — Terminal anónima para OSINT en Arch/Linux
-====================================================
+# **anonterm.sh** — Terminal Privada con Cloudflare WARP
 
-`anonterm` es un script para lanzar una terminal segura y anónima desde tu sistema real (como Warp o cualquier terminal en Arch Linux). Está diseñado para tareas de OSINT, navegación segura o situaciones donde necesites ocultar tu IP, MAC y evitar dejar rastros en el sistema.
+Este script configura una **terminal efímera** en tu sistema que:
 
-🛡️ Características
-------------------
+- Cambia automáticamente tu **dirección MAC** para mayor privacidad
+- Se **conecta automáticamente a Cloudflare WARP** al iniciarse
+- **No guarda historial** de comandos ni rastro al salir
+- Restaura tu **dirección MAC** y se **desconecta de WARP** cuando sales
 
-- 🔄 Detecta automáticamente la interfaz de red activa (eth0, wlan0, enpXsY…)
-- 🕵️‍♂️ Cambia tu dirección MAC aleatoriamente
-- 🧅 Inicia Tor y enruta comandos sensibles por Proxychains
-- 🚫 No guarda historial de comandos
-- 🧠 Usa tu shell Zsh habitual, con plugins y configuración completa
-- 🧼 Restaura la configuración original al salir (MAC, Tor, historial)
+---
 
-📦 Requisitos
--------------
+## 🚀 **Instalación**
 
-Asegúrate de tener instalados:
+2. **Hazlo ejecutable**:
 
-```bash
-sudo pacman -S tor proxychains-ng macchanger zsh
-```
-
-📁 Instalación
---------------
-
-1. Crea un directorio local si no lo tienes:
-   ```bash
-   mkdir -p ~/bin
-   ```
-
-2. Copia el script `anonterm` en `~/bin/anonterm` y hazlo ejecutable:
    ```bash
    chmod +x ~/bin/anonterm
    ```
 
-3. Asegúrate de tener `~/bin` en tu `$PATH`. Añade esto a tu `~/.zshrc` si no lo tienes:
+3. **Lánzalo**:
+
    ```bash
-   export PATH="$HOME/bin:$PATH"
+   ./anonterm
    ```
 
-4. Recarga tu Zsh:
-   ```bash
-   source ~/.zshrc
-   ```
+---
 
-▶️ Uso
-------
+## ⚙️ **Cómo Funciona**
 
-Para lanzar la terminal anónima:
-```bash
-anonterm
-```
+- **Inicio**: 
+   - Cambia tu **MAC** (al azar) para ocultar la identidad de tu dispositivo.
+   - Se conecta a **Cloudflare WARP** para asegurar tu tráfico.
+   - Inicia **Zsh** con tu configuración habitual (sin historial guardado).
 
-Verás mensajes como:
+- **Al Salir**: 
+   - Restaura tu **MAC** original.
+   - **Desconecta WARP** si lo conectó este script.
+   - **Borra el historial de comandos** creado en la sesión.
 
-```
-[*] Interfaz activa detectada: wlan0
-[*] Cambiando MAC...
-[*] Iniciando Tor...
-[✔] IP anónima actual: 185.x.x.x
-[*] Terminal anónima iniciada. Todo el tráfico OSINT irá por Tor.
-```
+---
 
-Al salir de la terminal (`exit`), el script:
-- Restaura tu MAC real
-- Detiene Tor (si lo inició él)
-- Borra el historial temporal
+## 🔧 **Requisitos**
 
-🔁 Alias útiles dentro de `anonterm`
-------------------------------------
+Este script requiere que tengas instalados los siguientes programas en tu sistema:
 
-Una vez dentro del entorno, puedes usar comandos comunes con protección automática:
+- **Zsh**: Tu shell preferido.
+- **Cloudflare WARP**: Asegúrate de tener instalado `warp-cli` y tener acceso a la red WARP.
+- **macchanger**: Para cambiar la dirección MAC.
+
+Puedes instalar los requisitos con los siguientes comandos (si no los tienes ya):
 
 ```bash
-curl          -> proxychains curl
-nmap          -> proxychains nmap
-whois         -> proxychains whois
-amass         -> proxychains amass
-theHarvester  -> proxychains theHarvester
+sudo pacman -S zsh macchanger cloudflare-warp-bin
 ```
 
-💡 Sugerencia
--------------
+---
 
-Usa `anonterm` solo cuando necesites una sesión verdaderamente anónima. Así mantienes tu sistema limpio y tus rastros ocultos.
+## 🌐 **Verificación de IP**
+
+Una vez que el script se ejecuta, puedes verificar que tu IP está protegida por WARP con este comando:
+
+```bash
+curl https://ifconfig.co
+```
+
+Tu IP aparecerá como la proporcionada por Cloudflare WARP, no la de tu red local.
+
+---
+
+## ⚡ **Comandos adicionales**
+
+Puedes también **consultar el estado de WARP** antes de ejecutar el script con:
+
+```bash
+warp-cli status
+```
+
+---
+
+## 🧹 **Personalización**
+
+Puedes modificar los siguientes parámetros en el script:
+
+- **Dirección MAC predeterminada**: Actualmente el script genera una MAC aleatoria. Si deseas utilizar una MAC estática, puedes modificar la línea que ejecuta `macchanger`.
+- **Cambio de configuración de Zsh**: El prompt de Zsh tiene un color temporal (verde o magenta). Puedes personalizarlo según tus preferencias en el archivo `~/.zshrc`.
+
+---
+
+## 🚨 **Notas**
+
+- **El script no realiza cambios permanentes** en tu configuración. Todo es temporal y solo afecta a la sesión de terminal iniciada con el script.
+- **WARP y la dirección MAC se restauran al salir**, por lo que no tienes que preocuparte por rastros dejados por el script.
+
