@@ -85,8 +85,3 @@ theHarvester  -> proxychains theHarvester
 -------------
 
 Usa `anonterm` solo cuando necesites una sesión verdaderamente anónima. Así mantienes tu sistema limpio y tus rastros ocultos.
-
-🧠 Autores / Créditos
----------------------
-
-Desarrollado con ❤️ por [TuNombre], con la ayuda de ChatGPT para uso personal de OSINT en Warp + Arch Linux.
