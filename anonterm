@@ -1,9 +1,21 @@
 #!/bin/bash
+set -euo pipefail
+
+show_help() {
+  echo "Uso: $0 [--help]"
+  echo "Terminal privada con MAC aleatoria y Cloudflare WARP."
+  echo "  --help    Muestra esta ayuda y sale."
+  exit 0
+}
+
+if [[ "${1:-}" == "--help" ]]; then
+  show_help
+fi
 
 # === DETECTAR INTERFAZ DE RED ACTIVA ===
 IFACE=$(ip route get 8.8.8.8 | grep -oP 'dev \K\S+')
-if [ -z "$IFACE" ]; then
-    echo "[✘] No se pudo detectar interfaz de red activa."
+if [ -z "${IFACE:-}" ]; then
+    echo -e "\e[31m[✘] No se pudo detectar interfaz de red activa.\e[0m"
     exit 1
 fi
 
@@ -19,26 +31,64 @@ fi
 # Verifica que los comandos esenciales estén
 for cmd in macchanger zsh warp-cli; do
     if ! command -v $cmd &>/dev/null; then
-        echo "[✘] Faltan dependencias: $cmd no está instalado."
+        echo -e "\e[31m[✘] Faltan dependencias: $cmd no está instalado.\e[0m"
         exit 1
     fi
 done
 
+# Solicita sudo una vez
+if ! sudo -v; then
+    echo -e "\e[31m[✘] Se requieren privilegios de sudo.\e[0m"
+    exit 1
+fi
+
+restore() {
+    echo -e "\e[33m[*] Restaurando MAC original en $IFACE...\e[0m"
+    sudo ip link set $IFACE down
+    sudo macchanger -m $REAL_MAC $IFACE &>/dev/null
+    sudo ip link set $IFACE up
+
+    if [ "${WARP_CONNECTED:-false}" = true ]; then
+        echo -e "\e[33m[*] Desconectando de WARP...\e[0m"
+        warp-cli disconnect
+    fi
+
+    rm -f "$TEMP_HIST"
+    echo -e "\e[32m[✔] Terminal privada finalizada. WARP y MAC restaurados.\e[0m"
+}
+trap restore EXIT INT TERM
+
 # === INICIO DE MODO PRIVADO CON WARP ===
 
-echo "[*] Interfaz activa detectada: $IFACE"
-echo "[*] Cambiando MAC de $IFACE..."
+echo -e "\e[36m[*] Interfaz activa detectada: $IFACE\e[0m"
+echo -e "\e[36m[*] Cambiando MAC de $IFACE...\e[0m"
 sudo ip link set $IFACE down
 sudo macchanger -r $IFACE &>/dev/null
 sudo ip link set $IFACE up
 
+NEW_MAC=$(cat /sys/class/net/$IFACE/address)
+if [[ "$NEW_MAC" == "$REAL_MAC" ]]; then
+    echo -e "\e[31m[✘] No se pudo cambiar la MAC. Abortando.\e[0m"
+    exit 1
+fi
+echo -e "\e[32m[✔] MAC cambiada: $NEW_MAC\e[0m"
+
 # Conectar a WARP si no está activo
 if ! warp-cli status | grep -q "warp=on"; then
-    echo "[*] Conectando a Cloudflare WARP..."
+    echo -e "\e[36m[*] Conectando a Cloudflare WARP...\e[0m"
     warp-cli connect
     WARP_CONNECTED=true
+    sleep 2
 else
-    echo "[*] Ya estás conectado a WARP."
+    echo -e "\e[32m[✔] Ya estás conectado a WARP.\e[0m"
+fi
+
+# Mostrar IP protegida
+WARP_IP=$(timeout 10 curl -s https://ifconfig.co || echo "No disponible")
+if [[ "$WARP_IP" == "No disponible" ]]; then
+    echo -e "\e[31m[✘] No se pudo obtener la IP protegida.\e[0m"
+else
+    echo -e "\e[32m[✔] IP protegida: $WARP_IP\e[0m"
 fi
 
 # Configura historial temporal
@@ -46,33 +96,13 @@ export HISTFILE=$TEMP_HIST
 export HISTSIZE=0
 export HISTFILESIZE=0
 
-# Prompt temporal indicando modo privado
-export PS1="%F{magenta}[warp]%f %n@%m %1~ %# "
+# Prompt temporal indicando modo privado (sin usuario/host)
+export PS1="%F{magenta}[warp]%f %1~ %# "
 
-# Mostrar IP protegida
-WARP_IP=$(timeout 10 curl -s https://ifconfig.co)
-echo "[✔] IP protegida: $WARP_IP"
-
-echo "[*] Terminal privada iniciada con Cloudflare WARP activo."
+echo -e "\e[32m[✔] Terminal privada iniciada con Cloudflare WARP activo.\e[0m"
 
 # Ejecuta Zsh con configuración completa
 zsh
 
-# === AL SALIR ===
-
-echo "[*] Cerrando terminal privada..."
-echo "[*] Restaurando MAC original en $IFACE..."
-sudo ip link set $IFACE down
-sudo macchanger -m $REAL_MAC $IFACE &>/dev/null
-sudo ip link set $IFACE up
-
-# Desconectar de WARP si fue conectado desde aquí
-if [ "$WARP_CONNECTED" = true ]; then
-    echo "[*] Desconectando de WARP..."
-    warp-cli disconnect
-fi
-
-# Borrar historial temporal
-rm -f "$TEMP_HIST"
-
-echo "[✔] Terminal privada finalizada. WARP y MAC restaurados."
+# El resto se maneja en restore() por el trap
+# Fin del script
